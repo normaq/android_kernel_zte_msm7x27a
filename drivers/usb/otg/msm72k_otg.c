@@ -318,6 +318,100 @@ static inline void set_driver_amplitude(struct msm_otg *dev)
 	ulpi_write(dev, res, ULPI_CONFIG_REG2);
 }
 
+/*for usb eye diagram test*/
+static int param_override_testing;
+static int param_override[] = {
+        -1,
+        -1,
+        -1,
+        -1,
+};
+
+static void param_override_init(struct msm_otg *motg)
+{
+        struct msm_otg_platform_data *pdata = motg->pdata;
+        int *seq = pdata->phy_init_seq_override;
+        int res = 0;
+        int i = 0;
+
+        if(param_override_testing)
+                seq = param_override;
+        dev_info(motg->otg.dev, "usb %s\n", __func__);
+        if (!seq){
+                dev_info(motg->otg.dev, "usb %s param_override_init is null\n", __func__);
+                return;
+        }
+
+        while (seq[i] >= 0) {
+                res = seq[i];
+                if (i == 0)
+                        ulpi_write(motg, res, ULPI_CONFIG_REG1);
+                else if (i == 1)
+                        ulpi_write(motg, res, ULPI_CONFIG_REG2);
+                else if (i == 2)
+                        ulpi_write(motg, res, ULPI_CONFIG_REG3);
+                else if (i == 3)
+                        ulpi_write(motg, res, 0x33);
+                i++;
+        }
+}
+
+static int diagram_param_write(const char *val, struct kernel_param *kp)
+{
+        int err, size, i=0;
+        char buf[256], *b;
+        char *value;
+        unsigned long tmp;
+        struct msm_otg *motg = the_msm_otg;
+        dev_info(motg->otg.dev, "usb diagram_param_write val = %s\n", val);
+
+        size=sizeof(param_override)-1;
+        strlcpy(buf, val, sizeof(buf));
+        b = strim(buf);
+        while (b) {
+                value = strsep(&b, ",");
+                if (value) {
+                        err = strict_strtoul(value, 16, &tmp);
+                        if (err) {
+                                dev_err(motg->otg.dev, "%s strict_strtoul failed\n",__func__);
+                                param_override_testing=0;
+                                goto out;
+                        }
+                        if(i < size)
+                                param_override[i]=(int)tmp;
+                        i++;
+                        if(!param_override_testing)
+                                param_override_testing=1;
+                }
+        }
+
+        param_override_init(motg);
+out:
+        return strlen(val);
+}
+
+static int diagrm_param_read(char *buf, struct kernel_param *kp)
+{
+        int i=0;
+        u32 reg[4]={0x30,0x31,0x32,0x33};
+        char *buff = buf;
+        struct msm_otg *motg = the_msm_otg;
+
+        ulpi_read(motg, reg[i]);
+        for(i=0; i<4; i++){
+                buff += scnprintf(buff,PAGE_SIZE,
+                                  "REG[0x%02x]=0x%02x,", reg[i], ulpi_read(motg, reg[i]));
+        }
+        if (buff != buf)
+                *(buff-1) = '\n';
+        return buff - buf;
+}
+
+module_param_call(diagram_param, diagram_param_write, diagrm_param_read,
+                  &param_override, 0664);
+MODULE_PARM_DESC(diagram_param, "USB eye diagram_param");
+/*end*/
+
 static const char *state_string(enum usb_otg_state state)
 {
 	switch (state) {
@@ -1594,6 +1688,9 @@ reset_link:
 				__func__, readl_relaxed(USB_GEN_CONFIG));
 	}
 	/* Ensure that RESET operation is completed before turning off clock */
+
+	param_override_init(dev); /*for usb eye diagram test*/
+
 	mb();
 
 	clk_disable(dev->alt_core_clk);
@@ -1649,6 +1746,7 @@ reset_link:
 		wake_lock(&dev->wlock);
 		queue_work(dev->wq, &dev->sm_work);
 	}
+
 }
 
 static void msm_otg_sm_work(struct work_struct *w)
@@ -2543,7 +2641,7 @@ static int otg_debugfs_init(struct msm_otg *dev)
 	if (!otg_debug_root)
 		return -ENOENT;
 
-	otg_debug_mode = debugfs_create_file("mode", 0222,
+	otg_debug_mode = debugfs_create_file("mode", 0224,
 						otg_debug_root, dev,
 						&otgfs_fops);
 	if (!otg_debug_mode)
