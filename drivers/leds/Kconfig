@@ -354,12 +354,28 @@ config LEDS_BD2802
 
 config LEDS_MSM_PMIC
         tristate "LED Support for Qualcomm PMIC connected LEDs"
-        default n
+        default y
         depends on ARCH_MSM
         help
           This option enables support for LEDs connected over PMIC
           (Power Management IC) chip on Qualcomm reference boards,
           for example SURF and FFAs.
+
+# added by zhang.yu_1 for enabling gpio19/20 ctrl led @110823
+config GPIO_19_20_CTRL_LED
+        bool "LED GPIO_19_20_CTRL_LED Support"
+        default n
+        depends on LEDS_MSM_PMIC
+        help
+          use gpio19/20 to control red/green led.		  
+
+# added by zhang.yu_1 for enabling gpio10/11 ctrl led @111104
+config GPIO_10_11_CTRL_LED
+        bool "LED GPIO_10_11_CTRL_LED Support"
+        default n
+        depends on LEDS_MSM_PMIC
+        help
+          use gpio10/11 to control red/green led.
 
 config LEDS_PMIC8058
 	tristate "LED Support for Qualcomm PMIC8058"
